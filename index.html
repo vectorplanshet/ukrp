@@ -5226,9 +5226,19 @@ onChildChanged(ref(fbDb, `${ROOM}/targets`), (snap) => {
         }
       }
     }
+if (newRoute.length > 0 && m._applyRoute) {
+      // оновлюємо тільки якщо маршрут реально змінився
+      const curWp = m._currentWaypoints || [];
+      const newWp = [[newLat, newLng], ...newRoute];
+      const lastNew = newWp[newWp.length - 1];
+      const lastCur = curWp[curWp.length - 1];
+      const routeChanged = !lastCur ||
+        Math.abs(lastNew[0] - lastCur[0]) > 0.0001 ||
+        Math.abs(lastNew[1] - lastCur[1]) > 0.0001;
 
-    if (newRoute.length > 0 && m._applyRoute) {
-      m._applyRoute([[newLat, newLng], ...newRoute]);
+      if (routeChanged) {
+        m._applyRoute(newWp);
+      }
     }
   }
 });
