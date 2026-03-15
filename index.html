@@ -5071,34 +5071,15 @@ onChildAdded(ref(fbDb, `${ROOM}/targets`), (snap) => {
   if (window._fbSpawnedIds.has(sid)) return;
   window._fbSpawnedIds.add(sid);
 
-  const elapsedSec = Math.max(0, (Date.now() - d.spawnTime) / 1000);
-  const speedMps   = (d.speed || 0) * 0.27778;
-  const pts        = [[d.spawnLat, d.spawnLng], ...(d.route || [])];
-
-  let startLat    = d.spawnLat;
-  let startLng    = d.spawnLng;
-  let remainRoute = d.route ? [...d.route] : [];
-
-  if (elapsedSec > 0 && speedMps > 0 && pts.length > 1) {
-    let distLeft = speedMps * elapsedSec;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p1 = pts[i], p2 = pts[i+1];
-      const segDist = _haverM(p1[0],p1[1],p2[0],p2[1]);
-      if (distLeft >= segDist) {
-        distLeft -= segDist;
-        startLat = p2[0]; startLng = p2[1];
-        remainRoute = pts.slice(i+2);
-      } else {
-        const frac = distLeft / segDist;
-        startLat = p1[0] + (p2[0]-p1[0]) * frac;
-        startLng = p1[1] + (p2[1]-p1[1]) * frac;
-        remainRoute = pts.slice(i+1);
-        break;
-      }
-    }
-  }
-
-  if (remainRoute.length === 0) return;
+  const _pos = window.calcPositionAtTime(
+      d.spawnLat, d.spawnLng,
+      d.route || [],
+      d.speed || 0,
+      d.spawnTime,
+      Date.now()
+  );
+  if (_pos.finished) return;
+  if (_pos.remainRoute.length === 0) return;
 
   // Конвертуємо іконку: .svg → .png для старого файлу
 const svgToPng = {
@@ -5138,18 +5119,18 @@ const svgToPng = {
     );
   }
 
-  window._scenarioMode       = true;
-  window._scenarioSpeed      = d.speed;
-  window._scenarioRoute      = remainRoute;
-  window._fbIncomingId       = sid;
-  window._fbIncomingIconHtml = iconHtmlAdapted || null;
-  window._fbIncomingIconUrl  = iconUrlPng;
-  window._fbIncomingIconClass= d.iconClass || null;
-  window._fbIncomingObjectId = d.objectIdLocal || null;
-  window._fbIncomingHeight   = d.height || null;
+window._scenarioMode        = true;
+  window._scenarioSpeed       = d.speed;
+  window._scenarioRoute       = _pos.remainRoute;
+  window._fbIncomingId        = sid;
+  window._fbIncomingIconHtml  = iconHtmlAdapted || null;
+  window._fbIncomingIconUrl   = iconUrlPng;
+  window._fbIncomingIconClass = d.iconClass || null;
+  window._fbIncomingObjectId  = d.objectIdLocal || null;
+  window._fbIncomingHeight    = d.height || null;
 
   window.map.fire('click', {
-    latlng: L.latLng(startLat, startLng),
+    latlng: L.latLng(_pos.lat, _pos.lng),
     simulated: true
   });
 
@@ -5194,54 +5175,32 @@ onChildChanged(ref(fbDb, `${ROOM}/targets`), (snap) => {
   const m = (window.allMarkers || []).find(mk => String(mk._fbId) === sid);
   if (!m) return;
 
-  // ── countValue ──
   if (d.countValue != null) {
     m._countValue = d.countValue;
     const cell = document.getElementById('count-cell-' + m._objectId);
     if (cell) cell.textContent = d.countValue;
   }
 
-  // ── оновлення маршруту ──
-  if (d.route && d.route.length > 0) {
-    const elapsedSec = Math.max(0, (Date.now() - d.spawnTime) / 1000);
-    const speedMps   = (d.speed || 0) * 0.27778;
-    const pts        = [[d.spawnLat, d.spawnLng], ...(d.route || [])];
+  const _pos = window.calcPositionAtTime(
+      d.spawnLat, d.spawnLng,
+      d.route || [],
+      d.speed || 0,
+      d.spawnTime,
+      Date.now()
+  );
 
-    let newLat = d.spawnLat, newLng = d.spawnLng;
-    let newRoute = [...d.route];
+  if (_pos.finished) return;
+  if (_pos.remainRoute.length === 0) return;
 
-    if (elapsedSec > 0 && speedMps > 0 && pts.length > 1) {
-      let distLeft = speedMps * elapsedSec;
-      for (let i = 0; i < pts.length - 1; i++) {
-        const p1 = pts[i], p2 = pts[i+1];
-        const segDist = _haverM(p1[0],p1[1],p2[0],p2[1]);
-        if (distLeft >= segDist) {
-          distLeft -= segDist;
-          newLat = p2[0]; newLng = p2[1];
-          newRoute = pts.slice(i+2);
-        } else {
-          const frac = distLeft / segDist;
-          newLat = p1[0] + (p2[0]-p1[0]) * frac;
-          newLng = p1[1] + (p2[1]-p1[1]) * frac;
-          newRoute = pts.slice(i+1);
-          break;
-        }
-      }
-    }
-if (newRoute.length > 0 && m._applyRoute) {
-      // оновлюємо тільки якщо маршрут реально змінився
-      const curWp = m._currentWaypoints || [];
-      const newWp = [[newLat, newLng], ...newRoute];
-      const lastNew = newWp[newWp.length - 1];
-      const lastCur = curWp[curWp.length - 1];
-      const routeChanged = !lastCur ||
-        Math.abs(lastNew[0] - lastCur[0]) > 0.0001 ||
-        Math.abs(lastNew[1] - lastCur[1]) > 0.0001;
+  const curWp = m._currentWaypoints || [];
+  const lastNew = _pos.remainRoute[_pos.remainRoute.length - 1];
+  const lastCur = curWp[curWp.length - 1];
+  const routeChanged = !lastCur ||
+    Math.abs(lastNew[0] - lastCur[0]) > 0.0001 ||
+    Math.abs(lastNew[1] - lastCur[1]) > 0.0001;
 
-      if (routeChanged) {
-        m._applyRoute(newWp);
-      }
-    }
+  if (routeChanged && m._applyRoute) {
+    m._applyRoute([[_pos.lat, _pos.lng], ..._pos.remainRoute]);
   }
 });
 
