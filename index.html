@@ -3821,6 +3821,7 @@ if (trailLine) trailLine.setLatLngs(trailCoords);
 
 // запускаем цикл анимации
 scheduleNextFrame(updatePosition);
+marker._currentWaypoints = [...waypoints];
 marker._applyRoute = function(newWaypoints) {
     waypoints = newWaypoints;
     currentWaypointIndex = 1;
@@ -3830,6 +3831,7 @@ marker._applyRoute = function(newWaypoints) {
     targetLngVar = waypoints[1][1];
     lastTimestamp = null;
     marker.setLatLng([currentLat, currentLng]);
+    marker._currentWaypoints = [...newWaypoints]; // зберігаємо для порівняння
 };
 // ==== Вспомогательные ====
 function haversine(lat1, lon1, lat2, lon2) {
