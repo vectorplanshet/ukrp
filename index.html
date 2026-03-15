@@ -2478,6 +2478,68 @@ transform: scale(0.95);
             zoomControl: false
         }).setView([48.3794, 31.1656], 7);
 window.map = map;
+
+        // ══════════════════════════════════════════════
+// ДЕТЕРМІНІСТИЧНА ФУНКЦІЯ ПОЗИЦІЇ
+// Рахує де маркер знаходиться в момент atTime
+// на основі spawnTime, route, speed
+// ══════════════════════════════════════════════
+window.calcPositionAtTime = function(spawnLat, spawnLng, route, speedKmh, spawnTime, atTime) {
+    const speedMps = speedKmh * 0.27778;
+    const elapsedSec = Math.max(0, (atTime - spawnTime) / 1000);
+    let distLeft = speedMps * elapsedSec;
+
+    // Будуємо повний список точок: [spawn, ...route]
+    const pts = [[spawnLat, spawnLng], ...(route || [])];
+
+    if (pts.length < 2) return {
+        lat: spawnLat, lng: spawnLng,
+        waypointIndex: 0,
+        remainRoute: route || [],
+        finished: false
+    };
+
+    function hvs(a, b, c, d) {
+        const R = 6371000, r = x => x * Math.PI / 180;
+        const dLat = r(c-a), dLng = r(d-b);
+        const x = Math.sin(dLat/2)**2 + Math.cos(r(a))*Math.cos(r(c))*Math.sin(dLng/2)**2;
+        return 2*R*Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+    }
+
+    function interpolate(p1, p2, frac) {
+        // лінійна інтерполяція між двома точками
+        return [
+            p1[0] + (p2[0]-p1[0]) * frac,
+            p1[1] + (p2[1]-p1[1]) * frac
+        ];
+    }
+
+    for (let i = 0; i < pts.length - 1; i++) {
+        const segDist = hvs(pts[i][0], pts[i][1], pts[i+1][0], pts[i+1][1]);
+        if (distLeft <= segDist) {
+            const frac = segDist > 0 ? distLeft / segDist : 0;
+            const pos = interpolate(pts[i], pts[i+1], frac);
+            return {
+                lat: pos[0],
+                lng: pos[1],
+                waypointIndex: i + 1,
+                remainRoute: pts.slice(i+1),
+                finished: false
+            };
+        }
+        distLeft -= segDist;
+    }
+
+    // Долетів до кінця
+    const last = pts[pts.length-1];
+    return {
+        lat: last[0],
+        lng: last[1],
+        waypointIndex: pts.length - 1,
+        remainRoute: [],
+        finished: true
+    };
+};
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
         }).addTo(map);
