@@ -5229,7 +5229,6 @@ onChildRemoved(ref(fbDb, `${ROOM}/targets`), (snap) => {
     break;
   }
 });
-
 onChildChanged(ref(fbDb, `${ROOM}/targets`), (snap) => {
   const d = snap.val();
   if (!d) return;
@@ -5243,6 +5242,29 @@ onChildChanged(ref(fbDb, `${ROOM}/targets`), (snap) => {
     if (cell) cell.textContent = d.countValue;
   }
 
+  // ── НОВА ГІЛКА: heartbeat з реальною позицією від автора ──
+  if (d.currentLat != null && d.currentLng != null) {
+    const newLat = d.currentLat;
+    const newLng = d.currentLng;
+
+    const curWp = m._currentWaypoints || [];
+    const lastCur = curWp[curWp.length - 1];
+    const posChanged = !lastCur ||
+      Math.abs(newLat - lastCur[0]) > 0.00005 ||
+      Math.abs(newLng - lastCur[1]) > 0.00005;
+
+    if (posChanged) {
+      m.setLatLng([newLat, newLng]);
+      if (d.remainRoute && d.remainRoute.length > 0) {
+        m._fbWaypoints    = [[newLat, newLng], ...d.remainRoute];
+        m._fbRouteUpdated = true;
+      }
+    }
+    return; // виходимо, calcPositionAtTime не потрібен
+  }
+  // ─────────────────────────────────────────────────────────
+
+  // fallback: стара логіка через calcPositionAtTime
   const _pos = window.calcPositionAtTime(
       d.spawnLat, d.spawnLng,
       d.route || [],
@@ -5265,15 +5287,6 @@ onChildChanged(ref(fbDb, `${ROOM}/targets`), (snap) => {
     m._applyRoute([[_pos.lat, _pos.lng], ..._pos.remainRoute]);
   }
 });
-
-function _haverM(lat1,lng1,lat2,lng2){
-  const R=6371000, r=x=>x*Math.PI/180;
-  const dLat=r(lat2-lat1), dLng=r(lng2-lng1);
-  const a=Math.sin(dLat/2)**2+Math.cos(r(lat1))*Math.cos(r(lat2))*Math.sin(dLng/2)**2;
-  return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
-}
-
-console.log('[FB-readonly] connected, room:', ROOM);
 </script>
 <!-- ===== / FIREBASE REALTIME SYNC ===== -->
 </body>
